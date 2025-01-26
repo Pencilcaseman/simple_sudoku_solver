@@ -1,3 +1,5 @@
+#![warn(clippy::pedantic, clippy::nursery)]
+
 use colored::Colorize;
 
 const ROW_SEP: &str = "+-------+-------+-------+";
@@ -5,14 +7,6 @@ const ROW_SEP: &str = "+-------+-------+-------+";
 const BOARD_SEP: usize = 3;
 const BOARD_LEN: usize = BOARD_SEP * BOARD_SEP;
 const BOARD_SIZE: usize = BOARD_LEN * BOARD_LEN;
-
-#[derive(Debug, Clone, Copy)]
-enum Direction {
-    Up,
-    Down,
-    Left,
-    Right,
-}
 
 #[derive(Debug, Default, Clone, Copy)]
 enum Cell {
@@ -26,14 +20,14 @@ enum Cell {
 impl Cell {
     fn count_superstates(&self) -> Option<usize> {
         match self {
-            Cell::Superposition(s) => Some(s.iter().filter(|&&x| x).count()),
+            Self::Superposition(s) => Some(s.iter().filter(|&&x| x).count()),
             _ => None,
         }
     }
 
     fn collapse(&self) -> Option<u8> {
         match self {
-            Cell::Superposition(s) => {
+            Self::Superposition(s) => {
                 let mut count = 0;
                 let mut value = 0;
 
@@ -44,7 +38,11 @@ impl Cell {
                     }
                 }
 
-                if count == 1 { Some(value as u8) } else { None }
+                if count == 1 {
+                    Some(u8::try_from(value).expect("Value out of range"))
+                } else {
+                    None
+                }
             }
             _ => None,
         }
@@ -54,10 +52,10 @@ impl Cell {
 impl std::fmt::Display for Cell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Cell::Empty => write!(f, " "),
-            Cell::Fixed(n) => write!(f, "{}", n.to_string().green()),
-            Cell::Collapsed(n) => write!(f, "{}", n.to_string().yellow()),
-            Cell::Superposition(_) => write!(f, "{}", "+".red()),
+            Self::Empty => write!(f, " "),
+            Self::Fixed(n) => write!(f, "{}", n.to_string().green()),
+            Self::Collapsed(n) => write!(f, "{}", n.to_string().yellow()),
+            Self::Superposition(_) => write!(f, "{}", "+".red()),
         }
     }
 }
@@ -69,25 +67,20 @@ struct Sudoku {
 
 impl std::default::Default for Sudoku {
     fn default() -> Self {
-        Self {
-            grid: [const { Cell::Empty }; BOARD_SIZE],
-        }
+        Self { grid: [const { Cell::Empty }; BOARD_SIZE] }
     }
 }
 
 impl Sudoku {
     fn from_zero_grid(grid: &[[u8; BOARD_LEN]; BOARD_LEN]) -> Self {
-        let mut sudoku = Sudoku::default();
+        let mut sudoku = Self::default();
 
         let mut idx = 0;
 
         for row in grid {
             for cell in row {
-                sudoku.grid[idx] = if *cell == 0 {
-                    Cell::Empty
-                } else {
-                    Cell::Fixed(*cell)
-                };
+                sudoku.grid[idx] =
+                    if *cell == 0 { Cell::Empty } else { Cell::Fixed(*cell) };
 
                 idx += 1;
             }
@@ -96,27 +89,27 @@ impl Sudoku {
         sudoku
     }
 
-    fn coord_to_idx((row, col): (usize, usize)) -> usize {
+    const fn coord_to_idx((row, col): (usize, usize)) -> usize {
         row * BOARD_LEN + col
     }
 
-    fn idx_to_coord(idx: usize) -> (usize, usize) {
+    const fn idx_to_coord(idx: usize) -> (usize, usize) {
         let row = idx / BOARD_LEN;
         let col = idx % BOARD_LEN;
         (row, col)
     }
 
-    fn row_idx(idx: usize) -> usize {
+    const fn row_idx(idx: usize) -> usize {
         let row = idx / BOARD_LEN;
         row * BOARD_LEN
     }
 
-    fn col_idx(idx: usize) -> usize {
+    const fn col_idx(idx: usize) -> usize {
         idx % BOARD_LEN
     }
 
-    fn subsection_idx(idx: usize) -> usize {
-        let (mut row, mut col) = Sudoku::idx_to_coord(idx);
+    const fn subsection_idx(idx: usize) -> usize {
+        let (mut row, mut col) = Self::idx_to_coord(idx);
         row -= row % BOARD_SEP;
         col -= col % BOARD_SEP;
         row * BOARD_LEN + col
@@ -142,7 +135,7 @@ impl Sudoku {
         };
 
         // Nothing horizontally can be the same
-        let row_idx = Sudoku::row_idx(idx);
+        let row_idx = Self::row_idx(idx);
         for col in row_idx..row_idx + BOARD_LEN {
             if let &mut Cell::Superposition(ref mut s) = &mut self.grid[col] {
                 s[n as usize - 1] = false;
@@ -150,7 +143,7 @@ impl Sudoku {
         }
 
         // Nothing vertically can be the same
-        let col_idx = Sudoku::col_idx(idx);
+        let col_idx = Self::col_idx(idx);
         for row in (col_idx..BOARD_SIZE).step_by(BOARD_LEN) {
             if let &mut Cell::Superposition(ref mut s) = &mut self.grid[row] {
                 s[n as usize - 1] = false;
@@ -158,13 +151,13 @@ impl Sudoku {
         }
 
         // Nothing in the same subsection can be the same
-        let subsection_idx = Sudoku::subsection_idx(idx);
-        let (row, col) = Sudoku::idx_to_coord(subsection_idx);
+        let subsection_idx = Self::subsection_idx(idx);
+        let (row, col) = Self::idx_to_coord(subsection_idx);
 
         for row in row..row + BOARD_SEP {
             for col in col..col + BOARD_SEP {
                 if let &mut Cell::Superposition(ref mut s) =
-                    &mut self.grid[Sudoku::coord_to_idx((row, col))]
+                    &mut self.grid[Self::coord_to_idx((row, col))]
                 {
                     s[n as usize - 1] = false;
                 }
@@ -180,13 +173,16 @@ impl Sudoku {
             return;
         };
 
-        for (val_idx, _) in superposition.iter().enumerate().filter(|(_, val)| **val) {
+        for (val_idx, _) in
+            superposition.iter().enumerate().filter(|(_, val)| **val)
+        {
             let mut num_alternatives = 0;
 
             // Nothing horizontally can be the same
-            let row_idx = Sudoku::row_idx(idx);
+            let row_idx = Self::row_idx(idx);
             for col in row_idx..row_idx + BOARD_LEN {
-                if let &mut Cell::Superposition(ref mut s) = &mut self.grid[col] {
+                if let &mut Cell::Superposition(ref mut s) = &mut self.grid[col]
+                {
                     if col != idx && s[val_idx] {
                         num_alternatives += 1;
                     }
@@ -195,15 +191,18 @@ impl Sudoku {
 
             if num_alternatives == 0 {
                 // Include the current cell
-                self.grid[idx] = Cell::Collapsed(val_idx as u8 + 1);
+                self.grid[idx] = Cell::Collapsed(
+                    u8::try_from(val_idx + 1).expect("Value out of range"),
+                );
                 break;
             }
 
             // Nothing vertically can be the same
-            let col_idx = Sudoku::col_idx(idx);
+            let col_idx = Self::col_idx(idx);
             num_alternatives = 0;
             for row in (col_idx..BOARD_SIZE).step_by(BOARD_LEN) {
-                if let &mut Cell::Superposition(ref mut s) = &mut self.grid[row] {
+                if let &mut Cell::Superposition(ref mut s) = &mut self.grid[row]
+                {
                     if row != idx && s[val_idx] {
                         num_alternatives += 1;
                     }
@@ -211,20 +210,24 @@ impl Sudoku {
             }
 
             if num_alternatives == 0 {
-                self.grid[idx] = Cell::Collapsed(val_idx as u8 + 1);
+                self.grid[idx] = Cell::Collapsed(
+                    u8::try_from(val_idx + 1).expect("Value out of range"),
+                );
                 break;
             }
 
             // Nothing in the same subsection can be the same
-            let subsection_idx = Sudoku::subsection_idx(idx);
-            let (row, col) = Sudoku::idx_to_coord(subsection_idx);
+            let subsection_idx = Self::subsection_idx(idx);
+            let (row, col) = Self::idx_to_coord(subsection_idx);
             num_alternatives = 0;
 
             for row in row..row + BOARD_SEP {
                 for col in col..col + BOARD_SEP {
-                    let tmp_idx = Sudoku::coord_to_idx((row, col));
+                    let tmp_idx = Self::coord_to_idx((row, col));
 
-                    if let &mut Cell::Superposition(ref mut s) = &mut self.grid[tmp_idx] {
+                    if let &mut Cell::Superposition(ref mut s) =
+                        &mut self.grid[tmp_idx]
+                    {
                         if tmp_idx != idx && s[val_idx] {
                             num_alternatives += 1;
                         }
@@ -233,7 +236,9 @@ impl Sudoku {
             }
 
             if num_alternatives == 0 {
-                self.grid[idx] = Cell::Collapsed(val_idx as u8 + 1);
+                self.grid[idx] = Cell::Collapsed(
+                    u8::try_from(val_idx + 1).expect("Value out of range"),
+                );
                 break;
             }
         }
@@ -285,17 +290,15 @@ impl Sudoku {
                 .position(|(_, cell)| matches!(cell, Cell::Superposition(_)))
                 .expect("No superstates found");
 
-            let Cell::Superposition(s) = self.grid[idx] else {
-                unreachable!()
-            };
+            let Cell::Superposition(s) = self.grid[idx] else { unreachable!() };
 
-            for possible_val in s
-                .iter()
-                .enumerate()
-                .filter_map(|(idx, val)| if *val { Some(idx + 1) } else { None })
-            {
+            for possible_val in s.iter().enumerate().filter_map(|(idx, val)| {
+                if *val { Some(idx + 1) } else { None }
+            }) {
                 let mut clone = *self;
-                clone.grid[idx] = Cell::Collapsed(possible_val as u8);
+                clone.grid[idx] = Cell::Collapsed(
+                    u8::try_from(possible_val).expect("Value out of range"),
+                );
 
                 clone.solve();
 
@@ -316,7 +319,7 @@ impl std::fmt::Display for Sudoku {
                     writeln!(f, "|")?;
                 }
 
-                write!(f, "{}\n| ", ROW_SEP)?;
+                write!(f, "{ROW_SEP}\n| ")?;
             } else if idx % BOARD_SEP == 0 {
                 write!(f, "| ")?;
 
@@ -325,10 +328,10 @@ impl std::fmt::Display for Sudoku {
                 }
             }
 
-            write!(f, "{} ", cell)?;
+            write!(f, "{cell} ")?;
         }
 
-        write!(f, "|\n{}", ROW_SEP)?;
+        write!(f, "|\n{ROW_SEP}")?;
 
         Ok(())
     }
@@ -392,10 +395,10 @@ fn main() {
 
     let mut sudoku = Sudoku::from_zero_grid(&SAMPLE_GRID);
 
-    println!("{}", sudoku);
+    println!("{sudoku}");
 
     sudoku.initialize_superpositions();
     sudoku.solve();
 
-    println!("{}", sudoku);
+    println!("{sudoku}");
 }
